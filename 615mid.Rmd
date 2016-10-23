@@ -1,0 +1,115 @@
+---
+title: "Speed Dating Experiment"
+subtitle: "615 midterm project"
+author: "Xin Chang"
+output: html_document
+---
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+```
+
+#Introduction
+What influences love at first sight? (Or, at least, love in the first four minutes?) This dataset was compiled by Columbia Business School professors Ray Fisman and Sheena Iyengar for their paper Gender Differences in Mate Selection: Evidence From a Speed Dating Experiment.
+Dataset: http://www.stat.columbia.edu/~gelman/arm/examples/speed.dating/
+
+Data was gathered from participants in experimental speed dating events from 2002-2004. During the events, the attendees would have a four minute "first date" with every other participant of the opposite sex. At the end of their four minutes, participants were asked if they would like to see their date again. They were also asked to rate their date on six attributes: Attractiveness, Sincerity, Intelligence, Fun, Ambition, and Shared Interests.
+
+
+#Data analysis
+## Read data
+
+```{r }
+data <- read.csv("~/Desktop/Speed Dating Data.csv", header=TRUE)
+data$income2 <- sub(",", "", data$income)
+data$income2 <- as.numeric(data$income2)
+data$incomesplit <- cut(data$income2, c(0,30000,50000,70000,90000,110000))
+data$date <- as.numeric(data$date)
+```
+
+##Income analysis
+First take a look at the behavior of different levels of income.
+
+```{r }
+ggplot(na.omit(data[, c("incomesplit", "date")]),aes(incomesplit,date))+geom_violin(color = "lightblue",fill="lightblue")+ggtitle("Income VS Date Frequency")+ylab("Income")+ylab("Never-----------------Several times a week")+scale_x_discrete(labels=c("<30000","3000--50000","50000-70000","70000-90000","90000-11000",">10000"))
+
+ggplot(na.omit(data[, c("income2", "goal")]),aes(factor(goal),income2))+geom_boxplot()+ggtitle("Income VS Reason for participant")+ylab("Income")+scale_x_discrete(labels=c("Fun", "Meet people", "Date", "Serious relationship", "Experience", "Other"))
+```
+
+From the graph, we cound find that there is no significant difference between different income levels. Although the group of highest level seems hsum smaller range, this may be caused by the smaller sample size of highes income group.
+
+For the goal to participant this experiemnt, we cound find that there is significant different between reasons "serious relationship" and "experience". People with higher income take the date more serious. 
+
+```{r}
+data$gender0 <- as.factor(data$gender)
+levels(data$gender0) <- c("female","male")
+ggplot(na.omit(data[,c("income2","attr_o","gender0")]),aes(factor(attr_o),income2,colour=gender0))+geom_boxplot(aes()) +geom_smooth(aes(group=as.factor(gender0)), se=FALSE)+labs(list(title="Rating by partner vs Income", x = "rating by partner", y = "Income"))
+```
+
+Above graph shows the relationship between income and the rating they gained from partner the night of the event, for all 6 attributes. It cound be obversed that there is a positive trend for male between rating and income, especially when the rating higher than 7. For famle, on the other hand, there is a negative trend when rating is higher than 7 while the trend becomes positive when rating higher than 9.
+
+```{r}
+## what do the topearners do?
+topearn <- unique(data[data$income2>quantile(data$income2, 0.95, na.rm=T) & !is.na(data$income2),c(49,196)])
+topearn[order(topearn$income2, decreasing=T),]
+
+```
+
+
+
+## What people look for in the oppposite sex
+In this experiement, we want to know what you look for in the opposite sex. 
+Method1: Please rate the importance of the following attributes in a potential date on a scale of 1-10 (1=not at all important, 10=extremely important)
+Method2: You have 100 points to distribute among the following attributes -- give more points to those attributes that are more important in a potential date, and fewer points to those attributes that are less important in a potential date.  Total points must equal 100.
+
+```{r}
+method1 <- data[data$wave>5 & data$wave<10,]
+method2 <- data[data$wave<6 | data$wave>9,]
+#method1
+f1<-subset(method1,gender==0)
+m1<-subset(method1,gender==1)
+f11<-colMeans(subset(f1,select = c(attr1_1,sinc1_1,intel1_1,fun1_1,amb1_1,shar1_1)),na.rm=TRUE)
+m11<-colMeans(subset(m1,select = c(attr1_1,sinc1_1,intel1_1,fun1_1,amb1_1,shar1_1)),na.rm=TRUE)
+barplot(rbind(f11,m11),col=c("lightpink","lightblue"),border = NA,legend=c("female","male"),main="What people look for in the opposite sex(method1)", name=c("Attractive", "Sincere", "Intelligent", "Fun", "Ambitious","Interest"),beside = TRUE)
+
+#method2
+f2<-subset(method2,gender==0)
+m2<-subset(method2,gender==1)
+f21<-colMeans(subset(f2,select = c(attr1_1,sinc1_1,intel1_1,fun1_1,amb1_1,shar1_1)),na.rm=TRUE)
+m21<-colMeans(subset(m2,select = c(attr1_1,sinc1_1,intel1_1,fun1_1,amb1_1,shar1_1)),na.rm=TRUE)
+barplot(rbind(f21,m21),col=c("lightpink","lightblue"),border = NA,legend=c("female","male"),main="What people look for in the opposite sex(method2)",name=c("Attractive", "Sincere", "Intelligent", "Fun", "Ambitious","Interest"),beside = TRUE)
+#compare method1 vs method2
+par(mfrow=c(1,2))
+barplot(rbind(f11/sum(f11),f21/sum(f21)),col=c("pink","red"),border = NA,legend=c("method1","method2"),main= "compare method1 and method2(female)",name=c("Attractive", "Sincere", "Intelligent", "Fun", "Ambitious","Interest"),beside = TRUE)
+barplot(rbind(m11/sum(m11),m21/sum(m21)),col=c("lightblue","blue"),border = NA,legend=c("method1","method2"),main= "compare method1 and method2(male)",name=c("Attractive", "Sincere", "Intelligent", "Fun", "Ambitious","Interest"),beside = TRUE)
+```
+
+From above graphs, it cound be found that in method1, when choices are not exclusive, both female and male think that intelligence is the most important. Males consider attrative more important than female, and ambition is more important for females. And for other factors, there is no significant difference between famles and males.
+
+However, when we look at the results from method2, the differences become larger. Since in method 2, choices are exclusive (total weight is 100). It cound be found that attractive is much more important for male than female. And for both male and female, the importance of ambition decreases a lot. For female, the most important factor is still intelligence. 
+
+To further compare results from method1 and method2, we can look at the third goup of graph. It cound be found that for female, both attractive and intelligence become more important when factors are exclusive, and imprtance of ambition and common interest decreases.
+For male, in method 2 , only the importance of attractive increases. 
+
+##What people think the opposite sex looks for
+We only look at the moethod 2 in this part.
+```{r}
+f24<-colMeans(subset(f2,select = c(attr4_1,sinc4_1,intel4_1,fun4_1,amb4_1,shar4_1)),na.rm=TRUE)
+m24<-colMeans(subset(m2,select = c(attr4_1,sinc4_1,intel4_1,fun4_1,amb4_1,shar4_1)),na.rm=TRUE)
+barplot(rbind(f24,m24),col=c("lightpink","lightblue"),border = NA,legend=c("female","male"),main="What people think the opposite sex looks for", name=c("Attractive", "Sincere", "Intelligent", "Fun", "Ambitious","Interest"),beside = TRUE)
+barplot(rbind(f24/sum(f24),m21/sum(m21)),col=c("lightpink","lightblue"),border = NA,legend=c("female's thought","male actual"),main= "compare what people think and  the fact",name=c("Attractive", "Sincere", "Intelligent", "Fun", "Ambitious","Interest"),beside = TRUE)
+
+barplot(rbind(m24/sum(m24),f21/sum(f21)),col=c("lightblue","lightpink"),border = NA,legend=c("male's thought","female actual"),main= "compare what people think and  the fact",name=c("Attractive", "Sincere", "Intelligent", "Fun", "Ambitious","Interest"),beside = TRUE)
+
+```
+
+From the graph above, it cound be found that femle know how important attractive is for male. But male actually care more about sincere and intelligent than female thought. And ambition is not as important as female thought for male. 
+
+And male overestimated the importnace of attactive for female. Male think female cares much about attractive and fun, and in fact women care more about intelligence, sincere. 
+
+##Acknowledge
+I use some R codes which Nicole Wheeler shared on kaggle.com
+https://www.kaggle.com/nwheeler443/d/annavictoria/speed-dating-experiment/exploring-the-data/
