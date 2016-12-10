@@ -1,4 +1,4 @@
-This is a brief introduction of files in this 615_final folder.
+This is a brief introduction of files in this 615_final folder:
 
 There are two files for my final project, both of them may takes some time to knit, please be patient. 
 
