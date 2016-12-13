@@ -1,0 +1,361 @@
+---
+title: "615_final"
+author: "Xin Chang"
+runtime: shiny
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(devtools)
+library(twitteR)
+library(dplyr)
+library(lubridate)
+library(ggplot2)
+library(tm)
+library(stringr)
+library(grid)
+library(wordcloud)
+library(RColorBrewer)
+library(qdap)
+library(RCurl)
+library(foreign)
+library(shiny)
+
+```
+
+
+```{r global_options,include=FALSE}
+knitr::opts_chunk$set(fig.width=7, fig.height=4, fig.path='Figs/',
+                      echo=FALSE, warning=FALSE)
+```
+
+
+# Introduction
+Moana is a 2016 American 3D computer-animated fantasy adventure film produced by Walt Disney Animation Studios and released by Walt Disney Pictures. The release date for this film is November 23, 2016 (United States). 
+
+This project focus on the tweets about Moana. According to the data mining, we could know people's reviews for this film. 
+
+
+# Read data from twitter
+
+For convenience, I save the cleaned data into a csv.file . This file can be found in the 615_final folder on my github. 
+
+```{r}
+# url <- "https://raw.githubusercontent.com/xinchang07/prj615/master/615_final/tweets_movie.csv"
+# url <- getURL(url)                
+# tweets_movie.df<- read.csv(textConnection(url))
+# tweets_movie.df<-tweets_movie.df[,-1] #Delete the first colunm from csv file
+
+```
+
+I gained the data from twiiter apllication using filterStream, the keyword I track is "moana", which makes sense cause it is the movie's name. 
+Following code is how I use to get data from twiiter and clean it is as following:(do not run)
+This code capable for other keyword, the only part needs to change is the track in filterStream.
+
+
+```{r}
+# library(ROAuth)
+# library(streamR)
+# requestURL <- "https://api.twitter.com/oauth/request_token"
+# accessURL <- "https://api.twitter.com/oauth/access_token"
+# authURL <- "https://api.twitter.com/oauth/authorize"
+# consumerKey <- "outTq5WTr9LR0bQ1Ri1SrwFsq"
+# consumerSecret <- "hPNPXx0NkePNbuZ9zlcHeUu98Cgf2RFwv2WWXQdi9hFTvsy4Pr"
+# myoauth <- OAuthFactory$new(consumerKey = consumerKey, consumerSecret = consumerSecret,
+#                              requestURL = requestURL, accessURL = accessURL, authURL = authURL)
+# myoauth$handshake(cainfo = system.file("CurlSSL", "cacert.pem", package = "RCurl"))
+# save(myoauth, file = "myoauth.Rdata")
+# load("myoauth.Rdata")
+# filterStream("tweets_laland.json",track=("lalaland"), language="en",tweets = 10000,
+#      timeout=3600, oauth=myoauth)
+# tweets.df <- parseTweets("tweets_laland.json", verbose=FALSE) #current tweet
+# length((grep("lalaland", tweets.df$text, ignore.case = TRUE)))
+# 
+# tweets.df$text<-str_replace_all(tweets.df$text,"[^[:graph:]]", " ")
+# tweets.df$text<-str_replace_all(tweets.df$text,'\uFFFD'," ")
+# tweets.df$text<-str_replace_all(tweets.df$text,'\u2026'," ")
+# write.csv(tweets.df,file="tweets_movie.csv")
+# tweets_movie.df<-tweets.df
+# tweets.df<-tweets.df %>% 
+#   filter(lat>-25 , lat< 50)
+# tweets.df<-tweets.df %>% 
+#   filter(lon>-125 , lon< -66)
+```
+
+```{r}
+tweets_movie<-read.csv("~/Desktop/test/prj615/tweets_movie.csv", comment.char="#")
+tweets_movie.df<-tweets_movie[1:1000,]
+```
+
+Now the data is got, let's play with it. 
+
+
+# When do people tweet?
+
+First, let's look at the time of these tweets. 
+
+```{r,echo=FALSE}
+time<-(tweets_movie.df$created_at)
+
+format.twitter.date <- function(datestring, format="datetime"){
+  if (format=="datetime"){
+    date <- as.POSIXct(datestring, format="%a %b %d %H:%M:%S %z %Y")
+  }
+  if (format=="date"){
+    date <- as.Date(datestring, format="%a %b %d %H:%M:%S %z %Y")
+  }
+  return(date)
+}
+time <- format.twitter.date(time, format="datetime")
+tweets_movie.df$created_at<-time
+ggplot(tweets_movie.df, aes(created_at)) +
+  geom_density(aes(fill = retweeted), alpha = .5) +
+  xlab('All tweets')
+```
+
+#where do people tweet
+
+The point below shows where people tweet. One points means one tweet. It could be found that most of the tweets from the east and west. 
+
+```{r,echo=FALSE}
+map.data <- map_data("state")
+points <- data.frame(x = as.numeric(tweets_movie.df$lon),
+                       y=as.numeric(tweets_movie.df$lat))
+points<-na.omit(points)
+points<-points %>%
+  filter(y>-25 , y< 50)
+points<-points %>%
+  filter(x>-125 , x< -66)
+ggplot(map.data) + geom_map(aes(map_id = region), map = map.data, fill = "white",
+                            color = "grey20", size = 0.25) +
+  expand_limits(x = map.data$long, y = map.data$lat) +
+  theme(axis.line = element_blank(), axis.text = element_blank(), axis.ticks = element_blank(),
+        axis.title = element_blank(), panel.background = element_blank(), panel.border = element_blank(),
+        panel.grid.major = element_blank(), plot.background = element_blank(), plot.margin = unit(0 * c(-1.5, -1.5, -1.5, -1.5), "lines"))+ geom_point (data = points, aes(x = x, y = y) ,size = 1, alpha = 1/5, color = "darkblue")
+
+```
+
+
+
+
+```{r,echo=FALSE}
+#This part focus on cleanin text for following analysis (will not show when knit)
+clean.text = function(x)
+{
+
+  # tolower
+  x = tolower(x)
+  # remove rt
+  x = gsub("rt", "", x)
+  # remove at
+  x = gsub("@\\w+", "", x)
+  # remove punctuation
+  x = gsub("[[:punct:]]", "", x)
+  # remove numbers
+  x = gsub("[[:digit:]]", "", x)
+  # remove links http
+  x = gsub("http\\w+", "", x)
+  # remove tabs
+  x = gsub("[ |\t]{2,}", "", x)
+  # remove blank spaces at the beginning
+  x = gsub("^ ", "", x)
+  # remove blank spaces at the end
+  x = gsub(" $", "", x)
+
+  return(x)
+}
+text.df<-tweets_movie.df %>% select(text,lat,lon)
+text.df<-(text.df[grep("moana", text.df$text, ignore.case = TRUE),])
+cleanText <- clean.text(text.df$text)
+remwords <- c("movie","see","watch","just") #without deleting the film name
+cleanText2<- removeWords(cleanText,c(stopwords("english"),remwords))
+corpus <- Corpus(VectorSource(cleanText))
+corpus <- tm_map(corpus, content_transformer(tolower))
+tdm <- TermDocumentMatrix(corpus,control = list(wordLengths = c(1, Inf)))
+term.freq <- rowSums(as.matrix(tdm))
+vector <- paste(cleanText2,collapse=" ")
+```
+
+#Text mining
+
+## Draw a wordcloud for the most frequent words in tweets
+
+Let's look at the content of the tweets, first Let's look at the wordcloud for most frequent words. It could be found that most words are positive and neutral.
+
+```{r,echo=FALSE}
+worldscld<-function(vector){
+  shinyApp(
+    ui=fluidPage(
+  # Application title
+  titlePanel("Word Cloud"),
+
+ 
+    column(3, wellPanel(
+   
+      sliderInput("freq",
+                  "Minimum Frequency:",
+                  min = 1,  max = 50, value = 15),
+      sliderInput("max",
+                  "Maximum Number of Words:",
+                  min = 1,  max = 300,  value = 100)
+    )),
+
+    # Show Word Cloud
+    column(6,
+      plotOutput("plot")
+    )
+  ),
+ 
+      
+    server = function(input, output, session) {
+      output$plot <- renderPlot({
+        
+        wordcloud(vector, scale=c(4,0.5),
+                  min.freq = input$freq, max.words=input$max,random.order=FALSE,
+                  rot.per=0.35, 
+                  colors=brewer.pal(8, "Dark2"))
+      })
+      
+    })
+    }
+     
+          
+        
+worldscld(vector)
+```
+
+## Look at the frequent words in details
+
+More details about which words people use most. And it seems people like to compare this movie with "Frozen". 
+
+```{r}
+#Look at the words more clearly with frequency more than 500 
+term.freq <- subset(term.freq, term.freq >= 40)
+df <- data.frame(term = names(term.freq), freq = term.freq)
+ 
+ ggplot(df, aes(x = term, y = freq)) + geom_bar(stat = "identity")+
+xlab("Terms") + ylab("Count") + coord_flip()
+```
+
+#Look at the specfic words
+
+Find the frequency of word you are interested in. 
+
+```{r}
+inputPanel(
+      textInput("text", "Please enter the word you interested (e.g,good):")
+     
+)
+
+renderText({
+  paste("Numbers of tweets contain this words:",length(grep(input$text, tweets_movie.df$text, ignore.case=TRUE)))
+  })
+
+```
+
+#Emotional analysis
+
+Let's look at the emotional content of these tweets. I'm using qdap's polarity function straight out of the box to examine the emotional valence of each tweet.
+Tweets are more positive if they have higher emotional valence. And when emotional valence is zero, it means this tweet has content without any emotional expression, in other word, it is a neutral comment. 
+
+In this part, we take a look at (1) The content of the most positive and negative tweet. (2) The number of negative, neutral, and positive tweets. (3) The most positive and negative words used in tweets.
+
+```{r,echo=FALSE}
+pol =
+  lapply(tweets_movie.df$text, function(txt) {
+    # strip sentence enders so each tweet is analyzed as a sentence,
+    # and +'s which muck up regex
+    gsub('(\\.|!|\\?)\\s+|(\\++)', ' ', txt) %>%
+      # strip URLs
+      gsub(' http[^[:blank:]]+', '', .) %>%
+      # calculate polarity
+      polarity()
+  })
+tweets_movie.df$emotionalValence = sapply(pol, function(x) x$all$polarity)
+
+
+# As reality check, what are the most and least positive tweets
+tweets_movie.df$text[which.max(tweets_movie.df$emotionalValence)]
+tweets_movie.df$text[which.min(tweets_movie.df$emotionalValence)]
+neutral <- length(which(tweets_movie.df$emotionalValence == 0))
+positive <- length(which(tweets_movie.df$emotionalValence > 0))
+negative <- length(which(tweets_movie.df$emotionalValence < 0))
+Sentiment <- c("Positive","Neutral","Negative")
+Count <- c(positive,neutral,negative)
+output <- as.data.frame(cbind(Sentiment,Count))
+ggplot(output,aes(x=Sentiment,y=Count))+geom_bar(stat = "identity")
+
+
+polWordTables =
+  sapply(pol, function(p) {
+    words = c(positiveWords = paste(p[[1]]$pos.words[[1]], collapse = ' '),
+              negativeWords = paste(p[[1]]$neg.words[[1]], collapse = ' '))
+    gsub('-', '', words)  # Get rid of nothing found's "-"
+  }) %>%
+  apply(1, paste, collapse = ' ') %>%
+  stripWhitespace() %>%
+  strsplit(' ') %>%
+  sapply(table)
+
+
+#What is the most positive/negative words in tweets
+
+par(mfrow = c(1, 2))
+invisible(
+  lapply(1:2, function(i) {
+    t<-sort(polWordTables[[i]],decreasing = TRUE)[1:30]
+    t<-sort(t,cex=.8)
+    dotchart(t)
+    mtext(names(polWordTables)[i])
+  }))
+```
+
+
+## How about the comparison with "Frozen" 
+
+As we know, "Frozen" is a very successful movie and it also comes from Disney, so it makes sense people will compare this movie with Frozen. I grasp tweets mentioning "Frozen" or "Elsa". Let's see the best comments and the worst comments. And compare the number of positive and negative comments. 
+
+It seems that people give a more positive comments when they compare these two movies. 
+
+Most positve comment:
+
+```{r}
+frozen<-text.df[((grep("Frozen", text.df$text, ignore.case = TRUE))),]
+elsa<-text.df[((grep("elsa", text.df$text, ignore.case = TRUE))),]
+frozen$text[which.max(frozen$emotionalValence)]
+elsa$text[which.max(elsa$emotionalValence)]
+```
+
+Most negative comment:
+
+```{r}
+frozen$text[which.min(frozen$emotionalValence)]
+elsa$text[which.min(elsa$emotionalValence)]
+
+```
+
+Much more positive than negative tweets 
+
+```{r}
+positive<-sum((frozen$emotionalValence>0)*1,na.rm = TRUE)+sum((elsa$emotionalValence>0)*1,na.rm = TRUE)
+negative<-sum((frozen$emotionalValence<0)*1,na.rm=TRUE)+
+  sum((elsa$emotionalValence<0)*1,na.rm = TRUE)
+print(c("positive",positive))
+print(c("nagetive",negative))
+```
+
+#Conclusion
+To sum up, we could say that Moana looks like a successful movie from twitter. Most related tweets are positive and most frequent words are positive. When it comes to the comparision, It could be found that "Moana" does not defeated by "Frozen" Also, from the location of tweets, we could find that people over the nation are talking about this movie. Overall, Moana is a successful movie. 
+
+
+#Acknowledge
+Following articles inspire me a lot, and some part of my code is from them:
+
+Levy Michael, "Playing with Twitter Data", http://michaellevy.name/blog/conference-twitter
+
+Smith David, "In-depth analysis of Twitter activity and sentiment, with R",  http://blog.revolutionanalytics.com/2016/01/twitter-sentiment.html
+
+Zhao Yanchang, "Twitter Data Analysis with R ??? Text Mining and Social Network Analysis"
+,  http://www.rdatamining.com/docs/twitter-analysis-with-r
+
